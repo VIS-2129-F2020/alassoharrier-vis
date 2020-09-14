@@ -1,0 +1,296 @@
+---
+title: "Vis Assignment 1"
+author: "Adriana LH"
+date: "9/12/2020"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: zenburn
+---
+```{r load libraries, include = FALSE}
+library(tidyverse)
+library(tidycensus)
+library(ggplot2)
+```
+
+# Defining my dataset
+For this assignment, I worked within the 2014-18 ACS survey.
+
+```{r}
+acs <- load_variables(year=2018, dataset = "acs5", cache = TRUE)
+```
+
+I focused my data in Suffolk County in MA. 
+
+My variables were:
+
+a) Population totals per census tract with access to internet [continuous]
+
+b) Median age in each census tract [continuous]
+
+c) Total population of each census tract [continuous]
+
+d) Whether a census tract was what I called "largely foreign-born," which I defined as anything above 25%. I didn't do over 50%, which would have been the majority, because there were very few census tracts that were majority foreign born and it would've made for a very boring variable. [categorical]
+
+e) The majority race of each census tract, which I defined as over 50%. [categorical]
+
+I found both Carole and Catherine (TA from Quant)'s examples of wrangling their data by racial group to be VERY helpful and used their examples as the base of my majority racial group data. Thank you!
+
+```{r}
+vars <- c(hispanic_latino = "B03002_012", 
+          white_alone = "B03002_003",
+          black_alone = "B03002_004",
+          asian_alone = "B03002_006",
+          total_pop = "B01003_001", 
+          internet_access = "B28002_001", 
+          med_age = "B01002_001",
+          foreign_born = "B05002_013")
+
+MA_tracts <- get_acs(geography = "tract",
+                     variables = vars,
+                     state = "MA",
+                     county = "Suffolk",
+                     output = "wide")
+```
+```{r}
+MA_tracts <- MA_tracts %>%
+
+  mutate(pct_latino = hispanic_latinoE/total_popE,
+         pct_white = white_aloneE/total_popE,
+         pct_black = black_aloneE/total_popE,
+         pct_asian = asian_aloneE/total_popE,
+         large_foreign = foreign_bornE/total_popE >0.25) %>%
+  
+  mutate(maj_race = case_when(pct_latino > 0.5 ~ "latino",
+                              pct_white > 0.5 ~ "white",
+                              pct_black > 0.5 ~ "black",
+                              pct_asian > 0.5 ~ "asian",
+                              TRUE ~ "no_majority")) %>%
+  
+  select(large_foreign, internet_accessE, med_ageE, maj_race, total_popE)
+```
+
+
+## Graph 1, scatterplot of the number of people with internet, by age; defined by the majority race/ethnicity
+```{r}
+ggplot(MA_tracts, 
+       aes(x = internet_accessE,
+           y = med_ageE,
+           color = maj_race)) +
+         geom_point() +
+  scale_x_continuous(name = "Number of People with internet", breaks = seq(1000, 4000, by = 1000),
+  labels = paste(seq(1000, 4000, by = 1000), sep = "")) +
+  scale_y_continuous(name = "Median Age", breaks = seq(20,70, by = 10)) +
+scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Latino",
+                                  "Non-Hispanic Asian",
+                                  "Non-Hispanic white",
+                                  "Non-Hispanic Black",
+                                  "No Majority")) +
+  theme_linedraw()
+```
+
+This seems kind of confusing...lots of dots everywhere with no real story. I guess it does show that the median age of most racial groups is in the 30-40 range.
+
+Now, I'll try to 
+
+## Graph 2, violin plot of the number of people per census tract by age; defined by the majority race/ethnicity
+```{r}
+ggplot(MA_tracts, 
+       aes(x = total_popE,
+           y = med_ageE,
+           color = maj_race)) +
+          geom_violin()+
+  scale_x_continuous(name = "Total Population by Census Tract", breaks = seq(1000, 10000, by = 1000),
+  labels = paste(seq(1000, 10000, by = 1000), sep = "")) +
+  scale_y_continuous(name = "Median Age", breaks = seq(20,70, by = 10)) +
+scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Latino",
+                                  "Non-Hispanic Asian",
+                                  "Non-Hispanic white",
+                                  "Non-Hispanic Black",
+                                  "No Majority")) +
+  theme_linedraw()
+```
+
+This one is also very confusing, mostly becuase the violins are intersecting with one another.
+
+Let's try to depict those tracts that are largely foreign born and those that are largely native born and plot their internet access by total population.
+
+## Graph 3, scatterplot of the number of people with internet in the total tract population, defined by foreign or native born status
+```{r}
+ggplot(MA_tracts, 
+       aes(x = internet_accessE,
+           y = total_popE,
+           color = large_foreign)) +
+         geom_point() +
+  scale_x_continuous(name = "Number of People with internet", breaks = seq(1000, 4000, by = 1000),
+  labels = paste(seq(1000, 4000, by = 1000), sep = "")) +
+  scale_y_continuous(name = "Total Population of Each Census Tract", breaks = seq(1000,10000, by = 1000)) +
+scale_color_discrete(name = "Foreign Born or Native Born",
+                       labels = c("Foreign Born", 
+                                  "Native Born")) +
+  theme_light()
+```
+
+It seems like the majority of the blue dots are scaling upwards, towards more people with internet? 
+
+
+## Graph 4, Scatterplot of largely foreign or native born census tracts by median age
+```{r}
+ggplot(MA_tracts, 
+       aes(x = large_foreign,
+           y = med_ageE,
+           color = large_foreign)) +
+  geom_point(position = "jitter",
+             size = .8,
+             alpha = .8) +
+  scale_x_discrete(name = "Foreign or native born",
+                       labels = c("Foreign-born", "Native-born")) +
+  scale_y_continuous(name = "Median age within tract",
+                     breaks = seq(10, 80, by = 10)) +
+  theme_light() +
+  theme(legend.position = "none")
+```
+
+I think this one is one of the clearest so far! What happens if...
+
+
+## Graph 5, Violin plot overlaid with scatterplot of largely foreign or native born census tracts by median age
+```{r}
+ggplot(MA_tracts, 
+       aes(x = large_foreign,
+           y = med_ageE,
+           color = large_foreign)) +
+  geom_violin() +
+  geom_point(position = "jitter",
+             size = .8,
+             alpha = .8) +
+  scale_x_discrete(name = "Foreign or native born",
+                       labels = c("Foreign-born", "Native-born")) +
+  scale_y_continuous(name = "Median age within tract",
+                     breaks = seq(10, 80, by = 10)) +
+  theme_light() +
+  theme(legend.position = "none")
+```
+
+Ok, this one seems a lot more clear. I can see that the native-born population has a much wider spread of ages. Both the foreign- and native-born tracts seem to have a fairly similar average age, with most of the dots hovering in the 30-40 age range.
+
+Even though the developers of ggplot don't like pie charts, I have to disagree. I find them easy to read and quickly understand information from, and they are also visually appealing.
+
+
+## Graph 6, Pie chart of the census tracts that are largely foreign born or largely native born
+```{r}
+pie_chart <- ggplot(MA_tracts, aes(x = 1, fill = large_foreign)) +
+  geom_bar(position = "fill") +
+  coord_polar(theta = "y") +
+  scale_y_continuous(name = "Number of tracts") +
+  scale_fill_discrete(name = "Foreign or Native Born",
+                       labels = c("Foreign Born", 
+                                  "Native Born")) +
+  theme_void() 
+pie_chart
+```
+
+This seems like what I would've expected from the data! 
+
+
+## Graph 7, Pie chart of majority race by census tract
+```{r}
+pie_chart <- ggplot(MA_tracts, aes(x = 1, fill = maj_race)) +
+  geom_bar(position = "fill") +
+  coord_polar(theta = "y") +
+  scale_y_continuous(name = "Number of tracts") +
+  scale_fill_discrete(name = "Majority Race or Ethnicity",
+                       labels = c("Latino", 
+                                  "White",
+                                  "Asian",
+                                  "Black",
+                                  "No majority")) +
+  theme_void() 
+pie_chart
+```
+
+Ok, this is my favorite chart so far. I find it fascinating that almost 50% of the tracts have no true racial majority. I also am surprised that so few tracts have a Latino majority! Next, I'd like to try one of my other favorite types of graphs, a bar graph.
+
+
+## Graph 8, bar graph of the total population by racial/ethnic group, showing what percentage is foreign or native born by racial group.
+
+```{r}
+ggplot(MA_tracts, aes(x = maj_race, fill = large_foreign)) +
+  geom_bar(position ="dodge") +
+  scale_y_continuous(name = "Total Population") +
+  scale_x_discrete(name = "Majority race/ethnicity",
+                       labels = c("Latino",
+                                  "White",
+                                  "Black",
+                                  "Asian",
+                                  "No majority")) +
+  scale_fill_discrete(name = element_blank(),
+                        labels = c("Foreign Born",
+                                   "Native Born")) +
+  theme_minimal() 
+```
+
+I think this gives an interesting picture into how many people in each racial or ethnic group were born in the US, versus those who weren't. I'm surprised by how none of the Latino group were born outside the US. I'm also wondering what the N/A value that only appears in the majority Asian tracts may mean, or why it only shows up there?
+
+## Graph 9, smoothed scatterplot showing internet access within the total population of the census tracts, parsed out by majority race or ethnicity
+```{r}
+ggplot(MA_tracts, 
+       aes(x = internet_accessE,
+           y = total_popE,
+           color = maj_race,
+           fill = maj_race)) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  scale_x_continuous(name = "Internet Access",
+                     breaks = seq(500, 2500, by = 500),
+                     labels = paste(seq(500, 2500, by = 500), sep = "")) +
+  scale_y_continuous(name = "Total Population within tract",
+                     breaks = seq(1000, 9000, by = 1000)) +
+  scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Latino",
+                                  "White",
+                                  "Black",
+                                  "Asian",
+                                  "No majority")) +
+  scale_fill_discrete(name = "Majority race/ethnicity",
+                       labels = c("Latino",
+                                  "White",
+                                  "Black",
+                                  "Asian",
+                                  "No majority")) +
+  theme_bw() 
+```
+
+I think this is a clearer way to view the scatterplot that I started this exercise with.
+
+Now, I want to try something a little crazy.
+
+## Graph 10, polar coordinate graph of internet access by census tract
+
+```{r}
+ggplot(MA_tracts, 
+       aes(x = internet_accessE,
+           y = total_popE)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  stat_smooth(color = "black", linetype = 2, size = 0.5) +
+  scale_x_continuous(name = "Internet Access by tract",
+                     labels = c("5 or 1", "1.5", "2", "2.5",
+                                "3", "3.5", "4", "4.5", "5"),
+                     breaks = seq(1, 5, by = 0.5)) +
+  scale_y_continuous(name = "Tract population",
+                     trans = "log",
+                     breaks = c(10, 100, 1000, 10000),
+                     labels = c("10", "100", "1,000", "10,000")) +
+  coord_polar(theta = "x") +
+  theme_minimal() 
+```
+
+Ok, I literally don't know what's going on here but it's nice to look at.
+
+## Conclusion
+
+This was a fun exercise, and I learned some new types of graphs I'd never known about (namely, the polar coordinate one). I do think the trusty pie chart and bar graph are my favorite three of the ten graphs I made. They actually seem to have a point, unlike many others. 
+
+
