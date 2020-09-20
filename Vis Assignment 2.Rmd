@@ -1,0 +1,145 @@
+---
+title: "Vis-Assignment-2"
+author: "Adriana LH"
+date: "9/19/2020"
+output: html_document
+---
+```{r load libraries, include = FALSE}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(ggspatial)
+library(cartogram)
+library(ggthemes)
+```
+
+```{r include = FALSE}
+world <- ne_countries(scale = 50, returnclass = "sf") 
+
+world_map <- ggplot(world) +
+  geom_sf() +
+  theme_solarized()
+
+world_map
+```
+## Mapping South America
+
+```{r}
+sa_countries <- world %>%
+  filter(continent == "South America")
+
+sa_map <- ggplot(sa_countries) +
+  geom_sf() + 
+  theme_solarized()
+
+sa_map
+```
+
+## Projections
+
+```{r}
+sa_albcon <- "+proj=aea +lat_1=-5 +lat_2=-42 +lat_0=-32 +lon_0=-60 +x_0=0 +y_0=0 +ellps=aust_SA +units=m no_defs"
+sa_bogota <- "+proj=tmerc +lat_0=4.599047222222222 +lon_0=-71.08091666666667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=intl +towgs84=307,304,-318,0,0,0,0 +units=m +no_defs"
+sa_brazil <- "+proj=poly +lat_0=0 +lon_0=-54 +x_0=5000000 +y_0=10000000 +ellps=aust_SA +towgs84=-57,1,-41,0,0,0,0 +units=m +no_defs"
+```
+
+## South America Albers Conical Equal Area (Brazil)
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf()+
+  coord_sf(crs = sa_albcon)+
+  theme_solarized()
+```
+
+## Bogotá 1975 / Colombia East
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = sa_bogota) +
+  theme_solarized()
+```
+
+## Brazil Polyconic
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = sa_brazil) +
+  theme_solarized()
+```
+```{r}
+sa_transformed <- sa_countries %>%
+  st_transform(crs = sa_brazil)
+
+indigenous_pop <- read_csv("Indigenous pop data.csv")
+```
+
+```{r}
+ip_countries <- sa_transformed %>%
+  left_join (indigenous_pop, by = c("name" = "Country Name")) %>%
+  mutate(pop = Number / X3) %>%
+  select(name, Number, pop)
+```
+
+```{r}
+ggplot(ip_countries, aes(fill = Number)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Population of Indigenous People per Country in South America (in millions)",
+    breaks = seq(100000, 500000, by = 100000),
+    labels = formatC(seq(100000, 500000, by = 100000), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+```{r}
+ip_countries_cont <- ip_countries %>%
+  cartogram_cont("Number")
+
+ggplot(ip_countries_cont, aes(fill = Number)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Population of Indigenous People per Country in South America (in millions)",
+    breaks = seq(100000, 500000, by = 100000),
+    labels = formatC(seq(100000, 500000, by = 100000), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+```{r}
+ip_countries_ncont <- ip_countries %>%
+  cartogram_ncont("Number")
+
+ggplot(ip_countries_ncont, aes(fill = Number)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Population of Indigenous People per Country in South America (in millions)",
+    breaks = seq(100000, 500000, by = 100000),
+    labels = formatC(seq(100000, 500000, by = 100000), 
+                     big.mark = ",", format = "f", digits = 0)) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+```{r}
+ip_population_circles <- ip_countries %>%
+  st_centroid()
+
+ggplot(sa_transformed) +
+  geom_sf(fill = NA, color = "gray") +
+ geom_sf(data = ip_population_circles, 
+          aes(size = Number),
+          alpha = 0.5, color = "pink") +
+  scale_size_continuous(name = "Population of Indigenous People per Country in South America (in millions)",
+    breaks = seq(100000, 500000, by = 100000),
+    labels = formatC(seq(100000, 500000, by = 100000), 
+                     big.mark = ",", format = "f", digits = 0),
+    range = c(0, 20)) +
+  theme_void() 
+
+```
+
