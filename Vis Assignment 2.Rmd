@@ -2,7 +2,10 @@
 title: "Vis-Assignment-2"
 author: "Adriana LH"
 date: "9/19/2020"
-output: html_document
+output:
+  html_document:
+    theme: cosmo
+    highlight: zenburn
 ---
 ```{r load libraries, include = FALSE}
 library(ggplot2)
@@ -37,6 +40,7 @@ sa_map
 ```
 
 ## Projections
+Finding three projections that distort the above map in a variety of ways.
 
 ```{r}
 sa_albcon <- "+proj=aea +lat_1=-5 +lat_2=-42 +lat_0=-32 +lon_0=-60 +x_0=0 +y_0=0 +ellps=aust_SA +units=m no_defs"
@@ -70,13 +74,19 @@ ggplot(sa_countries) +
   coord_sf(crs = sa_brazil) +
   theme_solarized()
 ```
+
+## Adding my data
+
+I am using a data set that shows the size of the indigenous population in each country. For this exercise, I actually ended up writing my own dataset using a variety of sources. First, I found the indigenous population of each Latin American country using this report (https://openknowledge.worldbank.org/bitstream/handle/10986/23751/Indigenous0Lat0y000the0first0decade.pdf), which draws on data from the last census available in each country at the time of publication (this report was published in 2015). Since it only includes Latin American countries, and not all countries in South America are in Latin America, I then used independent sources and articles (published by indigenous rights groups like Minority Rights Group and International Work Group for Indigenous Affairs) to find the indigenous population numbers for Guyana, French Guiana, and Suriname. 
+
+I then combined the data I found independently into a very simple Excel file that I converted into a csv and attached to this code, as seen below. The variables that I am studying/depicting on this map are the country name and the population of indigenous people as a percentage of the total country population.
+
 ```{r}
 sa_transformed <- sa_countries %>%
   st_transform(crs = sa_brazil)
 
 indigenous_pop <- read_csv("Indigenous pop data.csv")
 ```
-
 ```{r}
 ip_countries <- sa_transformed %>%
   left_join (indigenous_pop, by = c("name" = "Country Name")) %>%
@@ -84,47 +94,63 @@ ip_countries <- sa_transformed %>%
   select(name, Number, pop)
 ```
 
+
+## Choropleth Map
+The data is easily seen here.
+
 ```{r}
-ggplot(ip_countries, aes(fill = Number)) +
+ggplot(ip_countries, aes(fill = pop)) +
   geom_sf(color = NA) +
   scale_fill_viridis_c(
-    name = "Population of Indigenous People per Country in South America (in millions)",
-    breaks = seq(100000, 500000, by = 100000),
-    labels = formatC(seq(100000, 500000, by = 100000), 
-                     big.mark = ",", format = "f", digits = 0)) +
+    name = "Population of Indigenous People (%)",
+    breaks = seq(.01, 1, by = .05),
+    labels = formatC(seq(.01, 1, by = .05), 
+                     big.mark = ",", format = "f", digits = 2)) +
   theme_map() +
   theme(legend.background = element_blank())
 ```
+
+## Continuous Choropleth Map
+This is my favorite variation, as it really dramatically warps the map in order to show how outsizedly large Bolivia and Peru are in relation to the other countries. Even Suriname and Guyana, two tiny countries, dwarf the some of the larger countries (i.e. Brazil) in comparison when depicted this
 
 ```{r}
 ip_countries_cont <- ip_countries %>%
-  cartogram_cont("Number")
+  cartogram_cont("pop")
 
-ggplot(ip_countries_cont, aes(fill = Number)) +
+ggplot(ip_countries_cont, aes(fill = pop)) +
   geom_sf(color = NA) +
   scale_fill_viridis_c(
-    name = "Population of Indigenous People per Country in South America (in millions)",
-    breaks = seq(100000, 500000, by = 100000),
-    labels = formatC(seq(100000, 500000, by = 100000), 
-                     big.mark = ",", format = "f", digits = 0)) +
+   name = "Population of Indigenous People (%)",
+    breaks = seq(.01, 1, by = .05),
+    labels = formatC(seq(.01, 1, by = .05), 
+                     big.mark = ",", format = "f", digits = 2)) +
   theme_map() +
   theme(legend.background = element_blank())
 ```
+
+## Non-Contiguous Cartogram
+
+Similar to the one above in terms of dramatic visualization. Countries that have a huge landmass like Brazil and Argentina become microscopic.
 
 ```{r}
 ip_countries_ncont <- ip_countries %>%
-  cartogram_ncont("Number")
+  cartogram_ncont("pop")
 
-ggplot(ip_countries_ncont, aes(fill = Number)) +
+ggplot(ip_countries_ncont, aes(fill = pop)) +
   geom_sf(color = NA) +
   scale_fill_viridis_c(
-    name = "Population of Indigenous People per Country in South America (in millions)",
-    breaks = seq(100000, 500000, by = 100000),
-    labels = formatC(seq(100000, 500000, by = 100000), 
-                     big.mark = ",", format = "f", digits = 0)) +
+   name = "Population of Indigenous People (%)",
+    breaks = seq(.01, 1, by = .05),
+    labels = formatC(seq(.01, 1, by = .05), 
+                     big.mark = ",", format = "f", digits = 2)) +
   theme_map() +
   theme(legend.background = element_blank())
 ```
+
+## Centroid Map
+
+Another interesting way to show the data. At first, I had my breaks and labels set similarly to the maps I had above, but I thought that there were too many circle sizes and it was hard to really interpret the difference in size. So I simplified it by having 4 size types on the map, with the smallest size being for the smallest population and the largest size for the biggest population. 
+
 ```{r}
 ip_population_circles <- ip_countries %>%
   st_centroid()
@@ -132,13 +158,13 @@ ip_population_circles <- ip_countries %>%
 ggplot(sa_transformed) +
   geom_sf(fill = NA, color = "gray") +
  geom_sf(data = ip_population_circles, 
-          aes(size = Number),
-          alpha = 0.5, color = "pink") +
-  scale_size_continuous(name = "Population of Indigenous People per Country in South America (in millions)",
-    breaks = seq(100000, 500000, by = 100000),
-    labels = formatC(seq(100000, 500000, by = 100000), 
-                     big.mark = ",", format = "f", digits = 0),
-    range = c(0, 20)) +
+          aes(size = pop),
+          alpha = 1, color = "pink") +
+  scale_size_continuous(name = "Population of Indigenous People per country(%)",
+    breaks = seq(.01, 1, by = .1),
+    labels = formatC(seq(.01, 1, by = .1),  
+                     big.mark = ",", format = "f", digits = 1), 
+    range = c(0, 10)) +
   theme_void() 
 
 ```
