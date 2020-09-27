@@ -1,0 +1,237 @@
+---
+title: "Vis Assignment 3"
+author: "Adriana LH"
+date: "9/26/2020"
+output: 
+ html_document:
+    theme: cosmo
+    highlight: zenburn
+---
+```{r load libraries,include=FALSE}
+library(sf)
+library(tidyverse)
+library(ggthemes)
+library(ggspatial)
+library(units)
+library(nngeo)
+library(maps)
+library(viridis)
+```
+```{r}
+neighborhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+precincts <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/2bc185ec9b0b478d8c2f7e720d116863_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+hospitals <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/8f1e5741a4ee4c0f82925d17aab3c002_2.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+commcent <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/acedd06b39854088b0f2fefccffebf84_0.kml?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D", quiet = TRUE)
+```
+
+## Plotting my data points
+
+I chose to look at Boston neighborhoods and voting precincts (both polygon data) as well as hospitals and community centers in the city (both point data).
+
+```{r}
+ggplot(precincts) +
+  geom_sf(color = "yellow", fill = "gray") +
+  geom_sf(data = hospitals, size = 1.5) +
+  geom_sf(data = commcent, color = "blue", size = 1.5) +
+  geom_sf(data = neighborhoods, fill = NA)
+
+```
+
+## Transforming to the Massachusetts Mainland projection 
+```{r}
+MA_mainland <- "+proj=lcc +lat_1=42.68333333333333 +lat_2=41.71666666666667 +lat_0=41 +lon_0=-71.5 +x_0=200000.0001016002 +y_0=750000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=us-ft +no_defs"
+
+neighborhoods <- neighborhoods %>% 
+  st_transform(MA_mainland)
+
+commcent <- commcent %>% 
+  st_transform(MA_mainland)
+
+precincts <- precincts %>%
+  st_transform (MA_mainland)
+
+hospitals <- hospitals %>%
+  st_transform(MA_mainland)
+```
+
+```{r}
+ggplot(precincts) +
+  geom_sf(color = "yellow", fill = "gray") +
+  geom_sf(data = hospitals, size = 1.5) +
+  geom_sf(data = commcent, color = "blue", size = 1.5) +
+  geom_sf(data = neighborhoods, fill = NA) +
+  theme_map() +
+  annotation_scale()
+```
+
+## Figure 1: Number and proportion of community center points within 1000 meters of a hospital point
+```{r}
+hospitals_buffer <- st_buffer(hospitals, dist = 1000) %>%
+  st_union()
+
+ggplot(hospitals_buffer) + 
+  geom_sf() +
+  theme_map()
+```
+```{r}
+hospitals_commcent <- commcent[hospitals_buffer,]
+
+ggplot(hospitals_buffer) +
+geom_sf() +
+  geom_sf(data = hospitals_commcent, color = "blue", size = 2.5) +
+  theme_map()
+```
+```{r}
+commcent<- commcent %>%
+  st_join(hospitals_commcent) %>%
+  mutate(by_hospitals = !is.na(Name.y))
+
+n_hospitals_commcent <- sum(commcent$by_hospitals)
+
+n_hospitals_commcent
+```
+```{r}
+n_commcent <- length(commcent$by_hospitals)
+pct_hospitals_commcent <- n_hospitals_commcent/n_commcent
+
+pct_hospitals_commcent
+```
+
+There are only two community centers within 1000 meters of a hospital, which represents only 6% of community centers in the city. 
+
+```{r}
+left_side  <- st_bbox(hospitals)$xmin
+top_side <- st_bbox(hospitals)$ymax
+
+ggplot(neighborhoods) + 
+  geom_sf(fill = "gray") +
+  geom_sf(data = commcent, size = 2.5, 
+          aes(color = by_hospitals)) +
+  scale_color_manual(values = c("lightblue", "darkblue"),
+name = "Community Centers\nby distance to a hospital", 
+labels = c("No community center within 1000 m",
+          "Community Center within 1000 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_fancy_orienteering()) +
+  annotate(geom = "text", x = left_side,
+           y = top_side,
+           label = paste("Of the ",
+                         prettyNum(n_commcent, big.mark = " , "),
+                         " community centers in Boston, \n",
+                         prettyNum(n_hospitals_commcent, big.mark = ","),
+                         " (",
+                         prettyNum(100*pct_hospitals_commcent, digits = 0),
+                         "%) are within 1000/m of a hospital.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size =2.3) +
+  theme_map() +
+  theme(legend.position = "right")
+```
+
+## Figure 2: Number and proportion of neighborhoods containing hospitals
+
+```{r}
+neighborhoods <- neighborhoods %>%
+  mutate(num_hospitals = lengths(st_covers(neighborhoods, hospitals)))
+
+ggplot(neighborhoods) +
+  geom_sf(color = "black", 
+          aes(fill = num_hospitals)) +
+  scale_fill_viridis_c(name = "Boston Neighborhoods\nby number of hospitals",
+                       breaks = breaks <- seq(0, 10, by = 2),
+                       labels = paste(prettyNum(breaks, big.mark = "",),
+                                      "hospitals")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style =north_arrow_nautical()) +
+theme_map() +
+theme(legend.position = "right")
+```
+
+## Figure 3: Boston neighborhoods by number of community centers
+
+```{r}
+neighborhoods <- neighborhoods %>%
+  mutate(num_commcent = lengths(st_covers(neighborhoods, commcent)))
+
+ggplot(neighborhoods) +
+  geom_sf(color = "black", 
+          aes(fill = num_commcent)) +
+  scale_fill_viridis_c(name = "Boston Neighborhoods\nby number of Community Centers",
+                       breaks = breaks <- seq(0, 5, by = 1),
+                       labels = paste(prettyNum(breaks, big.mark = "",),
+                                      "Community Centers")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style =north_arrow_nautical()) +
+theme_map() +
+  theme(legend.position = "right")
+```
+
+## Figure 4: Overlapping neighborhood and voting precinct polygons
+
+```{r}
+neighborhoods <- neighborhoods %>%
+  mutate(num_precincts = length(st_overlaps(neighborhoods, precincts))) %>%
+  mutate(has_precincts = num_precincts > 0)
+
+num_precincts_neighborhoods <- sum(neighborhoods$has_precincts)
+num_precincts_neighborhoods
+```
+
+Each neighborhood has a voting precinct. 
+
+```{r}
+left_side <- st_bbox(precincts)$xmin
+top_side <- st_bbox(precincts)$ymax
+
+ggplot(precincts) +
+  geom_sf(fill = "yellow", color = NA) +
+  geom_sf(data = neighborhoods, 
+          aes(fill = has_precincts)) +
+  scale_fill_manual(values = c("yellow", "orange"),
+name = "Neighborhoods in Boston\nby presence of voting precincts",
+labels = c("Neighborhood without\noverlapping precincts",
+           "Neighborhood with\noverlapping precincts")) +
+annotation_scale(location = "br") +
+  annotate(geom = "text", left_side,
+           y= top_side-2000,
+           label = paste(num_precincts_neighborhoods, 
+                         "of Boston's",
+                         length(neighborhoods$Name),
+                         "neighborhoods \noverlap with",
+                         "precincts."),
+                   hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(legend.position = "right")
+```
+
+## Figure 5: Average density of hospital points in each neighborhood
+
+```{r}
+neighborhoods <- neighborhoods %>%
+  mutate(area = set_units(st_area(neighborhoods), km^2)) %>%
+  mutate(hospitals_dens = as.numeric(num_hospitals / area))
+
+ggplot(neighborhoods) +
+  geom_sf(color = NA,
+          aes(fill = hospitals_dens)) +
+  scale_fill_viridis_c(name = "Boston Neighborhoods\nby Hospital density",
+                       breaks = breaks <- seq(0, 10, by = 1),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "hospitals per square km"),
+                       option = "magma") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_nautical()) +
+  theme_map() +
+  theme(legend.position = "right")
+```
+
+## Figure 6: 
+
+
