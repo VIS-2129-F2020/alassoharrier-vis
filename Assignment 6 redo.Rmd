@@ -63,5 +63,5 @@ wifi_map2
 ```
 
 ```{r}
-saveWidget(wifi_map2, file = "bostonwifi.html")
+saveWidget(wifi_map2, file = "bostonwifi2.html")
 ```
