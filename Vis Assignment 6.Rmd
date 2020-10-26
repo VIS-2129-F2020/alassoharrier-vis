@@ -23,13 +23,22 @@ leaflet_plane <- "+proj=longlat +datum=WGS84"
 
 neighborhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.geojson?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D") %>%
 st_transform(crs =leaflet_plane)
+wifi <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/4b803745fedd4e88861967d16a1e07fb_0.geojson?outSR={%22latestWkid%22:3857,%22wkid%22:102100}") %>%
+  st_transform(crs =leaflet_plane)
 ```
 ```{r}
 neighborhoods$describe <- 
   paste(neighborhoods$Name, "<br>") %>%
   lapply(htmltools::HTML)
 
-neighborhoods_map <-leaflet(neighborhoods) %>%
+wifi$describe1 <- 
+  paste(wifi$Address, "<br>") %>%
+  lapply(htmltools::HTML)
+```
+
+```{r}
+
+wifi_map2<- leaflet(neighborhoods) %>%
   addProviderTiles(providers$Stamen.TonerLite) %>%
   addPolygons(fillColor = "bisque", stroke = FALSE,
               highlightOptions = highlightOptions(fillColor = "darksalmon", 
@@ -39,13 +48,21 @@ neighborhoods_map <-leaflet(neighborhoods) %>%
                color = "burlywood", 
                opacity = 1,
                weight = 1) %>%
-  addControl("Park Locations in Seattle", position = "topright") %>%
+  addCircles(data = wifi,
+    fillColor = "green", color = "green", 
+             stroke = FALSE, radius = 100,
+              highlightOptions = highlightOptions(fillColor = "darkgreen", 
+                                                  fillOpacity = 1),
+              popup = ~describe1) %>%
+  addControl("Boston's Free Wifi Hotspots by Neighborhood", position = "topright") %>%
   addControl('<a href="http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.geojson?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D">Data source</a>',
              position = "bottomleft")
-neighborhoods_map
+
+wifi_map2
+  
 ```
 
 ```{r}
-saveWidget(neighborhoods_map, file = "neighborhoods.html")
+saveWidget(wifi_map2, file = "bostonwifi.html")
 ```
 
