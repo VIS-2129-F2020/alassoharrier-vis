@@ -2,10 +2,12 @@
 title: "Assignment 7"
 author: "Adriana LH"
 date: "10/31/2020"
-output: html_document
+output: 
+ html_document:
+    theme: cosmo
+    highlight: zenburn
 ---
-
-```{r}
+```{r load libraries, include=FALSE}
 library(tidycensus)
 library(tidyverse)
 library(sf)
@@ -17,6 +19,9 @@ library(gstat)
 library(spatial)
 ```
 
+## Attaching my csv files
+
+The dataset I'm looking at tabulates all the evictions happening in each Boston census tract over the past 43 weeks. I realize that with the covid-induced eviction moratorium that has taken place over most of this year, this data is rather atypical (at least in 2020). However, I still thought it was interesting to investigate. 
 
 ```{r}
 evictions_boston <- read_csv("boston_20201024.csv") %>%
@@ -25,22 +30,14 @@ evictions_boston <- read_csv("boston_20201024.csv") %>%
 boston_tracts <- st_read("https://bostonopendata-boston.opendata.arcgis.com/datasets/4a8eb4fb3be44ed5a1eec28551b9f3b2_0.geojson?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D") %>%
    mutate (GEOID10 = as.numeric(GEOID10))
 ```
-
-
+##Cleaning my data
 
 ```{r}
 test <- evictions_boston %>%
   group_by(GEOID10, racial_majority) %>%
 summarise(total = sum(filings_2020))
 ```
-
-vars <- c(total_pop ="B01003_001")
-
-population <-  get_acs(geography = "tract",
-                     variables = vars,
-                     state = "MA",
-                     county = "Suffolk",
-                     output = "wide") %>%
+## Choropleth Map
 
 ```{r}
 evictions <- left_join(boston_tracts, test, by = "GEOID10") %>%
@@ -59,17 +56,18 @@ pal <- colorNumeric("viridis",
                     na.color = "#00000000")
 
 leaflet(evictions) %>%
-  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addProviderTiles(providers$Stamen.Toner) %>%
   addPolygons(highlightOptions = highlightOptions(fillOpacity = 1),
               label = ~label,
               fillColor = ~pal(total),
               weight = 1, color = "black") %>% 
    addControl('<a href="https://evictionlab.org/eviction-tracking/get-the-data/">Data source</a>',
-             position = "bottomleft") %>%
+             position = "topleft") %>%
+  addControl("Evictions in Boston Through the first 43 Weeks of 2020", position = "bottomleft") %>%
   addLegend(pal = pal, 
             values = ~total,
             bins = 10,
-            opacity = 0.7, title = "Total Evictions In Each Tract",
+            opacity = 0.75, title = "Total Evictions per Tract",
             position = "topright")
 
 ```
@@ -84,14 +82,15 @@ tract_points <- st_centroid(
   st_transform(WGS84)
 
 leaflet(tract_points) %>%
-  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addProviderTiles(providers$Stamen.Toner) %>%
   addCircles(label = ~label,
              fillColor = ~pal(total),
              stroke = FALSE, 
-             radius = 50, 
+             radius = 200, 
              fillOpacity = 1) %>% 
-  addControl('<a href="https://evictionlab.org/eviction-tracking/get-the-data/">Data source</a>',
-             position = "bottomleft") %>%
+   addControl('<a href="https://evictionlab.org/eviction-tracking/get-the-data/">Data source</a>',
+             position = "topleft") %>%
+  addControl("Evictions in Boston Through the first 43 Weeks of 2020", position = "bottomleft") %>%
   addLegend(pal = pal, 
             values = ~total,
             bins = 10,
@@ -119,11 +118,19 @@ leaflet(tract_points) %>%
   addProviderTiles(providers$Stamen.TonerLite) %>%
   addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
    addControl('<a href="https://evictionlab.org/eviction-tracking/get-the-data/">Data source</a>',
-             position = "bottomleft") %>%
+             position = "topleft") %>%
+  addControl("Evictions in Boston Through the First 43 Weeks of 2020",
+             position = "bottomleft")%>%
   addLegend(pal = pal, 
             values = ~total,
             bins = 10,
             opacity = 0.7, title = "Total Evictions in Each Tract",
             position = "topright")
 ```
+## Discussion of Map Fit/Appropriateness
 
+This data set was unique in the sense that it had one enormous outlier (50), with the majority of the eviction numbers being between 0 and 10. This meant that a map that allows the viewer to investigate the data and understand the granularity of it themselves is going to fit the data best. For this reason, the choropleth map (map #1) displaysbest map fit. With that map, the viewer is able to more clearly see the range of evictions between census tracts.
+
+Map #2 does also show that data spread accurately, but of course, with dozens of circles clustered on the map, it's just harder to comprehend. 
+
+Map #3, the raster interpolation map, shows this eviction data least faithfully. Due to its nature of smoothing data subtleties, t may give the viewer the (incorrect) sense that evictions are only happening in certain hotspot locations of the city. 
